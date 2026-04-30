@@ -101,20 +101,63 @@
             background: currentColor;
             animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
+        
+       
+        #risk-dropdown {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s ease-out;
+        }
+        #risk-dropdown.open {
+            grid-template-rows: 1fr;
+        }
+        .dropdown-content {
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col relative">
 
     <div id="map" class="absolute inset-0 z-0"></div>
 
-    <div id="weather-widget" class="absolute top-6 right-6 z-[1000] glass-panel rounded-2xl p-3 flex items-center gap-4 transition-all duration-700 opacity-0 -translate-y-4">
-        <div class="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 shadow-inner">
-            <i id="weather-icon" data-lucide="loader-2" class="w-6 h-6 text-white animate-spin"></i>
+ 
+    <div class="absolute top-6 right-6 z-[1000] flex flex-col gap-3 items-end">
+           
+        <div id="weather-widget" class="glass-panel rounded-2xl p-3 flex items-center gap-4 transition-all duration-700 opacity-0 -translate-y-4">
+            <div class="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 shadow-inner">
+                <i id="weather-icon" data-lucide="loader-2" class="w-6 h-6 text-white animate-spin"></i>
+            </div>
+            <div class="pr-3">
+                <p id="weather-desc" class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-0.5">Updating</p>
+                <p id="weather-temp" class="text-2xl font-bold text-white leading-none">--°C</p>
+            </div>
         </div>
-        <div class="pr-3">
-            <p id="weather-desc" class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-0.5">Updating</p>
-            <p id="weather-temp" class="text-2xl font-bold text-white leading-none">--°C</p>
+
+
+        <div id="risk-widget" class="glass-panel rounded-2xl w-64 transition-all duration-700 opacity-0 translate-x-4">
+            <div class="p-3 flex items-center justify-between cursor-pointer" onclick="toggleRiskDropdown()">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                        <i data-lucide="cpu" class="w-5 h-5 text-zinc-300"></i>
+                    </div>
+                    <div>
+                        <p class="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest mb-0.5">AI Risk Rating</p>
+                        <p id="risk-score" class="text-xl font-bold text-white leading-none">-- / 5</p>
+                    </div>
+                </div>
+                <div class="w-6 h-6 flex items-center justify-center bg-white/5 rounded-full mr-1">
+                    <i data-lucide="chevron-down" id="risk-chevron" class="w-4 h-4 text-zinc-400 transition-transform duration-300"></i>
+                </div>
+            </div>
+            <div id="risk-dropdown" class="border-t border-white/0 transition-colors duration-300">
+                <div class="dropdown-content">
+                    <div class="px-4 pb-4 pt-3 text-xs text-zinc-300 leading-relaxed" id="risk-explanation">
+                        Initializing environmental scans...
+                    </div>
+                </div>
+            </div>
         </div>
+
     </div>
 
     <script>
@@ -216,6 +259,82 @@
                 lucide.createIcons();
             } catch (e) {
                 console.log(e);
+            }
+        }
+
+        function updateRiskRating() {
+            const riskWidget = document.getElementById('risk-widget');
+            const scoreEl = document.getElementById('risk-score');
+            const explanationEl = document.getElementById('risk-explanation');
+
+            if (!globalAlerts || globalAlerts.length === 0) {
+                scoreEl.innerText = '1 / 5';
+                scoreEl.style.color = 'var(--apple-green)';
+                explanationEl.innerHTML = '<span class="font-semibold text-white">All Clear:</span> Artificial intelligence node detects zero critical anomalies or severe weather alerts within your immediate tracking radius.';
+                riskWidget.classList.remove('opacity-0', 'translate-x-4');
+                return;
+            }
+
+            let nearestAlert = null;
+            let minDistance = Infinity;
+
+           
+            globalAlerts.forEach(alert => {
+                const dist = getDistance(currentUserLat, currentUserLon, alert.lat, alert.lon);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestAlert = alert;
+                }
+            });
+            let risk = 1;
+            let severityModifier = 0;
+            let distanceModifier = 0;
+
+            if (nearestAlert) {
+                if (nearestAlert.severity === 'critical') severityModifier = 2;
+                else if (nearestAlert.severity === 'warning') severityModifier = 1;
+
+                if (minDistance < 50) distanceModifier = 3;
+                else if (minDistance < 250) distanceModifier = 2;
+                else if (minDistance < 600) distanceModifier = 1;
+
+                risk = Math.min(5, 1 + severityModifier + distanceModifier);
+                if (minDistance > 1200) risk = Math.min(2, risk); 
+                let color = 'var(--apple-green)';
+                if (risk >= 4) color = 'var(--apple-red)';
+                else if (risk === 3) color = 'var(--apple-orange)';
+                else if (risk === 2) color = 'var(--apple-yellow)';
+
+                scoreEl.innerText = `${risk} / 5`;
+                scoreEl.style.color = color;
+
+                const severityText = nearestAlert.severity.charAt(0).toUpperCase() + nearestAlert.severity.slice(1);
+                
+                explanationEl.innerHTML = `
+                    <span class="font-semibold text-white">Analysis:</span> Rating elevated due to a 
+                    <span class="text-[${color}] font-medium">${severityText} ${nearestAlert.type}</span> 
+                    (<span class="text-white/80">${nearestAlert.title}</span>). <br><br>
+                    It is currently located approximately <span class="font-semibold text-white">${Math.round(minDistance)} km</span> from your position.
+                `;
+            }
+
+            riskWidget.classList.remove('opacity-0', 'translate-x-4');
+        }
+
+        function toggleRiskDropdown() {
+            const dropdown = document.getElementById('risk-dropdown');
+            const chevron = document.getElementById('risk-chevron');
+            
+            if (dropdown.classList.contains('open')) {
+                dropdown.classList.remove('open');
+                dropdown.classList.remove('border-white/10');
+                dropdown.classList.add('border-white/0');
+                chevron.style.transform = 'rotate(0deg)';
+            } else {
+                dropdown.classList.add('open');
+                dropdown.classList.remove('border-white/0');
+                dropdown.classList.add('border-white/10');
+                chevron.style.transform = 'rotate(180deg)';
             }
         }
 
@@ -510,6 +629,7 @@
 
                 render();
                 updateDangerOverlay();
+                updateRiskRating();
             } catch (err) {
                 console.log(err);
             }
@@ -579,15 +699,18 @@
                         
                         updateWeatherWidget(currentUserLat, currentUserLon);
                         updateDangerOverlay();
+                        updateRiskRating();
                     }, 
                     () => {
                         updateWeatherWidget(currentUserLat, currentUserLon);
                         updateDangerOverlay();
+                        updateRiskRating();
                     }
                 );
             } else {
                 updateWeatherWidget(currentUserLat, currentUserLon);
                 updateDangerOverlay();
+                updateRiskRating();
             }
         }
 
