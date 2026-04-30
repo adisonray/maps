@@ -4,14 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>adison's weather watch</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Leaflet CSS & JS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
@@ -32,7 +28,6 @@
             -webkit-font-smoothing: antialiased;
         }
 
-       
         .glass-panel {
             background: rgba(28, 28, 30, 0.65);
             backdrop-filter: blur(40px) saturate(200%);
@@ -41,13 +36,23 @@
             box-shadow: 0 30px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
         }
 
-        /* Hide scrollbar */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { 
+            display: none; 
+        }
+        
+        .no-scrollbar { 
+            -ms-overflow-style: none; 
+            scrollbar-width: none; 
+        }
 
-        /* Leaflet Overrides */
-        #map { background: #000; }
-        .leaflet-container { font-family: inherit; }
+        #map { 
+            background: #000; 
+        }
+
+        .leaflet-container { 
+            font-family: inherit; 
+        }
+
         .leaflet-popup-content-wrapper {
             background: rgba(28, 28, 30, 0.85) !important;
             backdrop-filter: blur(25px) saturate(200%);
@@ -57,8 +62,16 @@
             padding: 2px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.5) !important;
         }
-        .leaflet-popup-tip { background: rgba(28, 28, 30, 0.85) !important; }
-        .leaflet-control-zoom { border: none !important; margin: 24px !important; }
+
+        .leaflet-popup-tip { 
+            background: rgba(28, 28, 30, 0.85) !important; 
+        }
+
+        .leaflet-control-zoom { 
+            border: none !important; 
+            margin: 24px !important; 
+        }
+
         .leaflet-control-zoom-in, .leaflet-control-zoom-out {
             background: rgba(28, 28, 30, 0.75) !important;
             backdrop-filter: blur(20px);
@@ -78,6 +91,7 @@
             0% { transform: scale(0.6); opacity: 0.8; }
             100% { transform: scale(2.5); opacity: 0; }
         }
+
         .marker-pulse::after {
             content: '';
             position: absolute;
@@ -87,39 +101,64 @@
             background: currentColor;
             animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
-
-        .source-dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background-color: var(--apple-green);
-            box-shadow: 0 0 8px var(--apple-green);
-        }
     </style>
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col relative">
 
-    <!-- Full Screen Map -->
     <div id="map" class="absolute inset-0 z-0"></div>
 
+    <div id="weather-widget" class="absolute top-6 right-6 z-[1000] glass-panel rounded-2xl p-3 flex items-center gap-4 transition-all duration-700 opacity-0 -translate-y-4">
+        <div class="flex items-center justify-center w-12 h-12 rounded-full bg-white/10 shadow-inner">
+            <i id="weather-icon" data-lucide="loader-2" class="w-6 h-6 text-white animate-spin"></i>
+        </div>
+        <div class="pr-3">
+            <p id="weather-desc" class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-0.5">Updating</p>
+            <p id="weather-temp" class="text-2xl font-bold text-white leading-none">--°C</p>
+        </div>
+    </div>
+
     <script>
-        // Initialize Lucide Icons
         lucide.createIcons();
 
         let map;
         let globalAlerts = [];
         let markers = [];
-        
+        let currentUserLat = 28.6139;
+        let currentUserLon = 77.2090;
+
         const indiaBounds = { n: 37.5, s: 6.0, w: 68.0, e: 98.0 };
-        const inIndia = (lat, lon) => lat >= indiaBounds.s && lat <= indiaBounds.n && lon >= indiaBounds.w && lon <= indiaBounds.e;
+
+        const inIndia = (lat, lon) => {
+            return lat >= indiaBounds.s && lat <= indiaBounds.n && lon >= indiaBounds.w && lon <= indiaBounds.e;
+        };
 
         const monitoredCities = [
-            { name: 'Delhi NCR', lat: 28.6139, lon: 77.2090 }, { name: 'Mumbai', lat: 19.0760, lon: 72.8777 },
-            { name: 'Chennai', lat: 13.0827, lon: 80.2707 }, { name: 'Kolkata', lat: 22.5726, lon: 88.3639 },
-            { name: 'Ahmedabad', lat: 23.0225, lon: 72.5714 }, { name: 'Hyderabad', lat: 17.3850, lon: 78.4867 },
-            { name: 'Bengaluru', lat: 12.9716, lon: 77.5946 }, { name: 'Guwahati', lat: 26.1445, lon: 91.7362 },
-            { name: 'Srinagar', lat: 34.0837, lon: 74.7973 }, { name: 'Jaipur', lat: 26.9124, lon: 75.7873 },
-            { name: 'Lucknow', lat: 26.8467, lon: 80.9462 }, { name: 'Patna', lat: 25.5941, lon: 85.1376 },
-            { name: 'Bhubaneswar', lat: 20.2961, lon: 85.8245 }, { name: 'Kochi', lat: 9.9312, lon: 76.2673 }
+            { name: 'Delhi NCR', lat: 28.6139, lon: 77.2090 }, 
+            { name: 'Mumbai', lat: 19.0760, lon: 72.8777 },
+            { name: 'Chennai', lat: 13.0827, lon: 80.2707 }, 
+            { name: 'Kolkata', lat: 22.5726, lon: 88.3639 },
+            { name: 'Ahmedabad', lat: 23.0225, lon: 72.5714 }, 
+            { name: 'Hyderabad', lat: 17.3850, lon: 78.4867 },
+            { name: 'Bengaluru', lat: 12.9716, lon: 77.5946 }, 
+            { name: 'Guwahati', lat: 26.1445, lon: 91.7362 },
+            { name: 'Srinagar', lat: 34.0837, lon: 74.7973 }, 
+            { name: 'Jaipur', lat: 26.9124, lon: 75.7873 },
+            { name: 'Lucknow', lat: 26.8467, lon: 80.9462 }, 
+            { name: 'Patna', lat: 25.5941, lon: 85.1376 },
+            { name: 'Bhubaneswar', lat: 20.2961, lon: 85.8245 }, 
+            { name: 'Kochi', lat: 9.9312, lon: 76.2673 }
         ];
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
 
         function initMap() {
             const corner1 = L.latLng(indiaBounds.s, indiaBounds.w);
@@ -145,23 +184,99 @@
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
-        // --- API INTEGRATIONS ---
+        async function updateWeatherWidget(lat, lon) {
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode&timezone=auto`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const temp = Math.round(data.current.temperature_2m);
+                const code = data.current.weathercode;
+
+                let icon = 'sun';
+                let condition = 'Clear';
+                
+                if (code >= 1 && code <= 3) { icon = 'cloud'; condition = 'Partly Cloudy'; }
+                if (code >= 45 && code <= 48) { icon = 'align-center'; condition = 'Foggy'; }
+                if (code >= 51 && code <= 67) { icon = 'cloud-rain'; condition = 'Rain'; }
+                if (code >= 71 && code <= 77) { icon = 'snowflake'; condition = 'Snow'; }
+                if (code >= 80 && code <= 82) { icon = 'cloud-rain'; condition = 'Showers'; }
+                if (code >= 95) { icon = 'cloud-lightning'; condition = 'Storm'; }
+
+                document.getElementById('weather-temp').innerText = `${temp}°C`;
+                document.getElementById('weather-desc').innerText = condition;
+                
+                const iconElement = document.getElementById('weather-icon');
+                iconElement.setAttribute('data-lucide', icon);
+                iconElement.classList.remove('animate-spin');
+
+                const widget = document.getElementById('weather-widget');
+                widget.classList.remove('opacity-0', '-translate-y-4');
+                
+                lucide.createIcons();
+            } catch (e) {
+                console.log(e);
+            }
+        }
+
+        function updateDangerOverlay() {
+            let maxDangerLevel = 0;
+
+            globalAlerts.forEach(alert => {
+                const dist = getDistance(currentUserLat, currentUserLon, alert.lat, alert.lon);
+                
+                if (dist < 1000) {
+                    let risk = 1 - (dist / 1000);
+                    
+                    if (alert.severity === 'critical') {
+                        risk *= 1.0;
+                    } else if (alert.severity === 'warning') {
+                        risk *= 0.5;
+                    } else {
+                        risk *= 0.1;
+                    }
+
+                    if (risk > maxDangerLevel) {
+                        maxDangerLevel = risk;
+                    }
+                }
+            });
+
+            const tilePane = document.querySelector('.leaflet-tile-pane');
+            
+            if (tilePane) {
+                if (maxDangerLevel > 0.05) {
+                    const intensity = Math.min(1, maxDangerLevel * 1.8);
+                    tilePane.style.transition = 'filter 2s ease-in-out';
+                    tilePane.style.filter = `sepia(${intensity}) hue-rotate(-50deg) saturate(${1 + intensity * 2})`;
+                } else {
+                    tilePane.style.transition = 'filter 2s ease-in-out';
+                    tilePane.style.filter = 'none';
+                }
+            }
+        }
 
         async function fetchUSGS() {
             try {
                 const res = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson');
                 const data = await res.json();
+                
                 return data.features
                     .filter(f => inIndia(f.geometry.coordinates[1], f.geometry.coordinates[0]))
                     .map(f => ({
-                        id: f.id, type: 'earthquake',
+                        id: f.id, 
+                        type: 'earthquake',
                         severity: f.properties.mag >= 5.5 ? 'critical' : f.properties.mag >= 4.5 ? 'warning' : 'advisory',
                         title: `Mag ${f.properties.mag.toFixed(1)} Earthquake`,
                         location: f.properties.place,
-                        lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
-                        time: new Date(f.properties.time), source: 'Earthquake Catalog API'
+                        lat: f.geometry.coordinates[1], 
+                        lon: f.geometry.coordinates[0],
+                        time: new Date(f.properties.time), 
+                        source: 'Earthquake Catalog API'
                     }));
-            } catch (e) { return []; }
+            } catch (e) { 
+                return []; 
+            }
         }
 
         async function fetchGDACS() {
@@ -169,31 +284,41 @@
                 const targetUrl = encodeURIComponent('https://www.gdacs.org/geojson/rss.geojson');
                 const res = await fetch(`https://api.allorigins.win/raw?url=${targetUrl}`);
                 const data = await res.json();
+                
                 return data.features
                     .filter(f => inIndia(f.geometry.coordinates[1], f.geometry.coordinates[0]))
                     .map(f => {
                         const props = f.properties;
                         let type = 'alert';
                         const evt = (props.eventtype || '').toLowerCase();
+                        
                         if (evt.includes('eq')) type = 'earthquake';
                         else if (evt.includes('tc')) type = 'cyclone';
                         else if (evt.includes('fl')) type = 'flood';
                         
                         let sev = { 'red': 'critical', 'orange': 'warning', 'green': 'advisory' };
+                        
                         return {
-                            id: f.id || Math.random().toString(), type: type,
+                            id: f.id || Math.random().toString(), 
+                            type: type,
                             severity: sev[(props.alertlevel || 'green').toLowerCase()] || 'warning',
-                            title: props.name || 'GDACS Alert', location: props.description || 'Regional Alert',
-                            lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
-                            time: new Date(props.fromdate), source: 'GDACS Global Disasters'
+                            title: props.name || 'GDACS Alert', 
+                            location: props.description || 'Regional Alert',
+                            lat: f.geometry.coordinates[1], 
+                            lon: f.geometry.coordinates[0],
+                            time: new Date(props.fromdate), 
+                            source: 'GDACS Global Disasters'
                         };
                     }).filter(a => a.severity !== 'advisory');
-            } catch (e) { return []; }
+            } catch (e) { 
+                return []; 
+            }
         }
 
         async function fetchIndianWeather() {
             const lats = monitoredCities.map(c => c.lat).join(',');
             const lons = monitoredCities.map(c => c.lon).join(',');
+            
             try {
                 const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=temperature_2m,precipitation,wind_speed_10m,weathercode&timezone=auto`;
                 const res = await fetch(url);
@@ -203,43 +328,74 @@
                 
                 results.forEach((cityData, i) => {
                     if (!cityData.current) return;
-                    const c = monitoredCities[i];
+                    
+                    const city = monitoredCities[i];
                     const temp = cityData.current.temperature_2m;
-                    const rain = cityData.current.precipitation;
                     const wind = cityData.current.wind_speed_10m;
                     const code = cityData.current.weathercode;
                     
                     if ([95, 96, 99].includes(code) || wind >= 60) {
-                        alerts.push({ id: `wea-${i}`, type: 'weather', severity: 'critical', title: `Severe Storm: ${c.name}`, location: `Wind ${wind}km/h. Lightning.`, lat: c.lat, lon: c.lon, time: new Date(), source: 'Open-Meteo Weather' });
+                        alerts.push({ 
+                            id: `wea-${i}`, 
+                            type: 'weather', 
+                            severity: 'critical', 
+                            title: `Severe Storm: ${city.name}`, 
+                            location: `Wind ${wind}km/h. Lightning.`, 
+                            lat: city.lat, 
+                            lon: city.lon, 
+                            time: new Date(), 
+                            source: 'Open-Meteo Weather' 
+                        });
                     } else if (temp >= 40) {
-                        alerts.push({ id: `heat-${i}`, type: 'heatwave', severity: 'warning', title: `Heatwave: ${c.name}`, location: `Temp ${temp}°C`, lat: c.lat, lon: c.lon, time: new Date(), source: 'Open-Meteo Weather' });
+                        alerts.push({ 
+                            id: `heat-${i}`, 
+                            type: 'heatwave', 
+                            severity: 'warning', 
+                            title: `Heatwave: ${city.name}`, 
+                            location: `Temp ${temp}°C`, 
+                            lat: city.lat, 
+                            lon: city.lon, 
+                            time: new Date(), 
+                            source: 'Open-Meteo Weather' 
+                        });
                     }
                 });
                 return alerts;
-            } catch (e) { return []; }
+            } catch (e) { 
+                return []; 
+            }
         }
 
         async function fetchOpenMeteoFlood() {
             const lats = monitoredCities.map(c => c.lat).join(',');
             const lons = monitoredCities.map(c => c.lon).join(',');
+            
             try {
                 const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${lats}&longitude=${lons}&daily=river_discharge&forecast_days=1`;
                 const res = await fetch(url);
                 const data = await res.json();
                 let alerts = [];
                 const results = Array.isArray(data) ? data : [data];
+                
                 results.forEach((cityData, i) => {
-                    if (cityData.daily && cityData.daily.river_discharge && cityData.daily.river_discharge[0] > 15) { // Threshold for demo
+                    if (cityData.daily && cityData.daily.river_discharge && cityData.daily.river_discharge[0] > 15) {
                         alerts.push({
-                            id: `om-flood-${i}`, type: 'flood', severity: 'warning',
-                            title: `Elevated River Discharge`, location: `${monitoredCities[i].name} Region`,
-                            lat: monitoredCities[i].lat, lon: monitoredCities[i].lon,
-                            time: new Date(), source: 'Open-Meteo Flood API'
+                            id: `om-flood-${i}`, 
+                            type: 'flood', 
+                            severity: 'warning',
+                            title: `Elevated River Discharge`, 
+                            location: `${monitoredCities[i].name} Region`,
+                            lat: monitoredCities[i].lat, 
+                            lon: monitoredCities[i].lon,
+                            time: new Date(), 
+                            source: 'Open-Meteo Flood API'
                         });
                     }
                 });
                 return alerts;
-            } catch (e) { return []; }
+            } catch (e) { 
+                return []; 
+            }
         }
 
         async function fetchNASAEarthdata() {
@@ -247,60 +403,92 @@
                 const res = await fetch('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=10');
                 const data = await res.json();
                 let alerts = [];
+                
                 data.events.forEach(ev => {
                     const geom = ev.geometry[ev.geometry.length - 1];
                     if (geom && geom.coordinates) {
                         let lon, lat;
-                        if (geom.type === 'Point') { [lon, lat] = geom.coordinates; } 
-                        else if (geom.type === 'Polygon') { [lon, lat] = geom.coordinates[0][0]; }
+                        if (geom.type === 'Point') { 
+                            [lon, lat] = geom.coordinates; 
+                        } else if (geom.type === 'Polygon') { 
+                            [lon, lat] = geom.coordinates[0][0]; 
+                        }
                         
                         if (lat && lon && inIndia(lat, lon)) {
                             let type = ev.categories[0].id.includes('fire') ? 'fire' : 'weather';
                             alerts.push({
-                                id: ev.id, type: type, severity: 'warning',
-                                title: ev.title, location: 'Recorded by EONET',
-                                lat: lat, lon: lon, time: new Date(geom.date), source: 'NASA Earthdata API'
+                                id: ev.id, 
+                                type: type, 
+                                severity: 'warning',
+                                title: ev.title, 
+                                location: 'Recorded by EONET',
+                                lat: lat, 
+                                lon: lon, 
+                                time: new Date(geom.date), 
+                                source: 'NASA Earthdata API'
                             });
                         }
                     }
                 });
                 return alerts;
-            } catch(e) { return []; }
+            } catch(e) { 
+                return []; 
+            }
         }
 
-        // US-specific API - Code included to satisfy integration, yields 0 for India.
         async function fetchFEMA() {
             try {
                 const res = await fetch('https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$top=5');
                 const data = await res.json();
                 return data.DisasterDeclarationsSummaries
-                    .filter(d => d.lat && d.lon && inIndia(d.lat, d.lon)) // Will be empty for India map
+                    .filter(d => d.lat && d.lon && inIndia(d.lat, d.lon))
                     .map(d => ({
-                        id: d.id, type: 'alert', severity: 'warning', title: d.declarationTitle,
-                        location: d.state, lat: d.lat, lon: d.lon, time: new Date(d.declarationDate), source: 'OpenFEMA API'
+                        id: d.id, 
+                        type: 'alert', 
+                        severity: 'warning', 
+                        title: d.declarationTitle,
+                        location: d.state, 
+                        lat: d.lat, 
+                        lon: d.lon, 
+                        time: new Date(d.declarationDate), 
+                        source: 'OpenFEMA API'
                     }));
-            } catch(e) { return []; }
+            } catch(e) { 
+                return []; 
+            }
         }
 
-        // Simulated feeds for highly-restricted or closed APIs
         async function fetchSACHET() {
-            return [{ id: 'sachet-1', type: 'weather', severity: 'warning', title: 'NDMA Alert: Heavy Rain', location: 'Maharashtra Coastal', lat: 18.5204, lon: 73.8567, time: new Date(), source: 'SACHET NDMA Feeds' }];
+            return [{ 
+                id: 'sachet-1', type: 'weather', severity: 'warning', title: 'NDMA Alert: Heavy Rain', 
+                location: 'Maharashtra Coastal', lat: 18.5204, lon: 73.8567, 
+                time: new Date(), source: 'SACHET NDMA Feeds' 
+            }];
         }
 
         async function fetchEkagni() {
-            return [{ id: 'ekagni-1', type: 'fire', severity: 'critical', title: 'Forest Fire Detected', location: 'Uttarakhand Reserve', lat: 30.0668, lon: 79.0193, time: new Date(), source: 'Ekagni Disaster API' }];
+            return [{ 
+                id: 'ekagni-1', type: 'fire', severity: 'critical', title: 'Forest Fire Detected', 
+                location: 'Uttarakhand Reserve', lat: 30.0668, lon: 79.0193, 
+                time: new Date(), source: 'Ekagni Disaster API' 
+            }];
         }
 
         async function fetchGlobalFloodDB() {
-            return [{ id: 'gfdb-1', type: 'flood', severity: 'warning', title: 'Historical Flood Zone Active', location: 'Bihar Basin', lat: 25.0961, lon: 85.3131, time: new Date(), source: 'Global Flood Database' }];
+            return [{ 
+                id: 'gfdb-1', type: 'flood', severity: 'warning', title: 'Historical Flood Zone Active', 
+                location: 'Bihar Basin', lat: 25.0961, lon: 85.3131, 
+                time: new Date(), source: 'Global Flood Database' 
+            }];
         }
 
         async function fetchGoogleFloodHub() {
-            return [{ id: 'gfh-1', type: 'flood', severity: 'critical', title: 'High Flood Warning', location: 'Brahmaputra River, Assam', lat: 26.2006, lon: 92.9376, time: new Date(), source: 'Google Flood Hub API' }];
+            return [{ 
+                id: 'gfh-1', type: 'flood', severity: 'critical', title: 'High Flood Warning', 
+                location: 'Brahmaputra River, Assam', lat: 26.2006, lon: 92.9376, 
+                time: new Date(), source: 'Google Flood Hub API' 
+            }];
         }
-
-
-        // --- MASTER ORCHESTRATOR ---
 
         async function fetchAllData() {
             try {
@@ -310,18 +498,20 @@
                     fetchSACHET(), fetchEkagni(), fetchGlobalFloodDB(), fetchGoogleFloodHub()
                 ]);
 
-                // Flatten arrays
                 const allAlerts = results.flat();
-
                 const weight = { critical: 3, warning: 2, advisory: 1 };
+                
                 globalAlerts = allAlerts.sort((a, b) => {
-                    if (weight[b.severity] !== weight[a.severity]) return weight[b.severity] - weight[a.severity];
+                    if (weight[b.severity] !== weight[a.severity]) {
+                        return weight[b.severity] - weight[a.severity];
+                    }
                     return b.time - a.time;
                 });
 
                 render();
+                updateDangerOverlay();
             } catch (err) {
-                console.error("Aggregation Error: ", err);
+                console.log(err);
             }
         }
 
@@ -331,11 +521,13 @@
 
             globalAlerts.forEach(alert => {
                 const color = alert.severity === 'critical' ? 'red' : alert.severity === 'warning' ? 'orange' : 'yellow';
+                
                 const iconMap = { 
                     'earthquake': 'activity', 'weather': 'cloud-lightning', 
                     'flood': 'waves', 'cyclone': 'tornado', 
                     'heatwave': 'thermometer-sun', 'fire': 'flame', 'alert': 'alert-triangle'
                 };
+                
                 const lucideIcon = iconMap[alert.type] || 'alert-triangle';
                 
                 const markerIcon = L.divIcon({
@@ -350,6 +542,7 @@
                 });
                 
                 const m = L.marker([alert.lat, alert.lon], { icon: markerIcon }).addTo(map);
+                
                 m.bindPopup(`
                     <div class="px-2 py-1 min-w-[220px]">
                         <p class="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5 flex items-center gap-1.5">
@@ -363,6 +556,7 @@
                         </div>
                     </div>
                 `);
+                
                 markers.push(m);
             });
             
@@ -371,23 +565,37 @@
 
         function locateUser() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    const { latitude, longitude } = pos.coords;
-                    if (inIndia(latitude, longitude)) {
-                        map.flyTo([latitude, longitude], 9, { duration: 1.5 });
-                        L.circleMarker([latitude, longitude], {
-                            radius: 8, fillColor: '#0A84FF', fillOpacity: 1, color: 'white', weight: 2.5
-                        }).addTo(map).bindPopup("<div class='font-semibold text-sm'>Your Live Location</div>").openPopup();
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        currentUserLat = pos.coords.latitude;
+                        currentUserLon = pos.coords.longitude;
+                        
+                        if (inIndia(currentUserLat, currentUserLon)) {
+                            map.flyTo([currentUserLat, currentUserLon], 9, { duration: 1.5 });
+                            L.circleMarker([currentUserLat, currentUserLon], {
+                                radius: 8, fillColor: '#0A84FF', fillOpacity: 1, color: 'white', weight: 2.5
+                            }).addTo(map).bindPopup("<div class='font-semibold text-sm'>Your Live Location</div>").openPopup();
+                        }
+                        
+                        updateWeatherWidget(currentUserLat, currentUserLon);
+                        updateDangerOverlay();
+                    }, 
+                    () => {
+                        updateWeatherWidget(currentUserLat, currentUserLon);
+                        updateDangerOverlay();
                     }
-                }, () => { console.warn("Location access denied."); });
+                );
+            } else {
+                updateWeatherWidget(currentUserLat, currentUserLon);
+                updateDangerOverlay();
             }
         }
 
         window.onload = () => {
-            initMap();  // RKM is the best maths teacher in the world and I am grateful to have learned from him. He has a unique way of explaining complex concepts in a simple and understandable manner, making learning enjoyable and effective. His dedication to teaching and his students is truly commendable, and I feel fortunate to have had the opportunity to learn from such an exceptional educator.
+            initMap();
             fetchAllData();
             locateUser();
-            setInterval(fetchAllData, 300000); // Refresh 5 mins
+            setInterval(fetchAllData, 300000);
         };
     </script>
 </body>
