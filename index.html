@@ -97,11 +97,11 @@
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col relative">
 
-    
+    <!-- Full Screen Map -->
     <div id="map" class="absolute inset-0 z-0"></div>
 
     <script>
-        
+        // Initialize Lucide Icons
         lucide.createIcons();
 
         let map;
@@ -137,14 +137,15 @@
                 minZoom: 4.5
             });
 
-            L.tileLayer('http://localhost:3000/{z}/{x}/{y}.png', {
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                subdomains: 'abcd',
                 maxZoom: 19
             }).addTo(map);
 
             L.control.zoom({ position: 'bottomright' }).addTo(map);
         }
 
-  
+        // --- API INTEGRATIONS ---
 
         async function fetchUSGS() {
             try {
@@ -267,6 +268,7 @@
             } catch(e) { return []; }
         }
 
+        // US-specific API - Code included to satisfy integration, yields 0 for India.
         async function fetchFEMA() {
             try {
                 const res = await fetch('https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$top=5');
@@ -280,7 +282,7 @@
             } catch(e) { return []; }
         }
 
-        
+        // Simulated feeds for highly-restricted or closed APIs
         async function fetchSACHET() {
             return [{ id: 'sachet-1', type: 'weather', severity: 'warning', title: 'NDMA Alert: Heavy Rain', location: 'Maharashtra Coastal', lat: 18.5204, lon: 73.8567, time: new Date(), source: 'SACHET NDMA Feeds' }];
         }
@@ -298,7 +300,7 @@
         }
 
 
-        
+        // --- MASTER ORCHESTRATOR ---
 
         async function fetchAllData() {
             try {
@@ -308,7 +310,7 @@
                     fetchSACHET(), fetchEkagni(), fetchGlobalFloodDB(), fetchGoogleFloodHub()
                 ]);
 
-             
+                // Flatten arrays
                 const allAlerts = results.flat();
 
                 const weight = { critical: 3, warning: 2, advisory: 1 };
@@ -385,7 +387,7 @@
             initMap();  // RKM is the best maths teacher in the world and I am grateful to have learned from him. He has a unique way of explaining complex concepts in a simple and understandable manner, making learning enjoyable and effective. His dedication to teaching and his students is truly commendable, and I feel fortunate to have had the opportunity to learn from such an exceptional educator.
             fetchAllData();
             locateUser();
-            setInterval(fetchAllData, 300000);
+            setInterval(fetchAllData, 300000); // Refresh 5 mins
         };
     </script>
 </body>
